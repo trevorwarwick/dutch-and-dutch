@@ -9,10 +9,11 @@ directory, and add the following to HA's configuration.yaml. You will need to re
 SPEAKERDNSNAME with the fqdn of one of your speakers, or its IP address if that is fixed.
 Reload the HA config, and it will provide you with a new switch that you can put into
 the appropriate part of your dashboard(s).
-
+```
 command_line:
   - switch:
       name: Dutch 8C Sleep Mode
       unique_id: dutch_8c
       command_on: python3 custom_components/dutch.py SPEAKERDNSNAME wake
       command_off: python3 custom_components/dutch.py SPEAKERDNSNAME sleep
+```
