@@ -27,13 +27,17 @@
 # just backtrace if anything unexpected happens.
 #
 # To make the script work reliably using the Home Assistant
-# command_line integration it tries to use the IPv4 address of the
-# master speaker directly, as otherwise it randomly seems to get an
-# IPv6 local address back from DNS, which fails to connect.
+# command_line integration, if you supply the script with an 
+# IP address instead of a hostname, it will assume that is the
+# master speaker, and talk to it directly.  You can find the master
+# speaker by giving it the hostname, and it will print out the master's 
+# IP address
 #
 #
 
+import time
 import json
+import re
 import sys
 import socket
 import websocket
@@ -43,24 +47,42 @@ class DutchRoom :
 
     # Talk to either speaker and find out who the master is. Not sure
     # if this really matters, but we might as well, because the App
-    # does it.
-    def getmasterurl(self):
+    # does it. If an IP address is provided as the speaker name we will just
+    # assume that one is the master
+    def getmasterurl(self, rawip):
         """Get the master speaker websocket URL"""
-        ws = websocket.WebSocket()
-        ws.connect('ws://'+self.name+':8768')
-        ws.send(
-            json.dumps(
-                {"meta":{"id":"999912345678","method":"read","endpoint":\
-                         "master"},"data":{}}
+        if rawip :
+            self.masterurl = 'ws://'+self.name+':8768'
+        else :
+            ws = websocket.WebSocket()
+            ws.connect('ws://'+self.name+':8768')
+            ws.send(
+                json.dumps(
+                    {"meta":{"id":"999912345678","method":"read","endpoint":\
+                             "master"},"data":{}}
+                )
             )
-        )
-        response = ws.recv()
-        data = json.loads(response)
-        ws.close()
-        masterhost = data['data']['address']['hostname']
-        masteraddr = socket.gethostbyname(masterhost)   # IPv4 address only
-        masterport = str(data['data']['address']['port_ascend'])
-        self.masterurl = "ws://" + masteraddr + ":" + masterport
+            response = ws.recv()
+            data = json.loads(response)
+            ws.close()
+            masterhost = data['data']['address']['hostname']
+            # Especially on Home Assistant, the mDNS resolution sometimes fails
+            # initially. So retry it a few times before giving up
+            tries = 5
+            for i in range(tries) :
+                try:
+                    masteraddr = socket.gethostbyname(masterhost)   # IPv4 address only
+                except:
+                    if i == (tries - 1) :
+                        print("gethostbyname ", masterhost," failed")
+                        raise 
+                    else:
+                        time.sleep(1)
+                        continue
+                    break
+            masterport = str(data['data']['address']['port_ascend'])
+            self.masterurl = "ws://" + masteraddr + ":" + masterport
+            print ("Master speaker IP: ", masteraddr)
 
     # Find out a room ID from the master speaker, by asking for a list
     # of targets. Even though the query specifies "room", it seems to
@@ -108,7 +130,7 @@ class DutchRoom :
         self.ws.send(
             command
         )
-        response = self.ws.recv()
+        self.ws.recv()
         self.ws.close()
 
     # Dump data
@@ -121,10 +143,10 @@ class DutchRoom :
     #
     # Class init. Get the Room ID we want to talk to.
     #
-    def __init__(self,name):
+    def __init__(self,name, rawip):
         """Init"""
         self.name = name
-        self.getmasterurl()
+        self.getmasterurl(rawip)
         self.getroomid()
 
 
@@ -137,7 +159,13 @@ def main():
     if (len(args) < 2) or (args[1] != "wake" and args[1] != "sleep" and args[1] != "dump")  :
         print ("Usage: " + sys.argv[0] + " name wake|sleep|dump")
         return 1
-    room = DutchRoom(args[0])
+
+    # check for first argument being an IP address, if so we assume it's the master
+    pat = re.compile ("^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$")
+    rawip = bool(re.match(pat, args[0]))
+
+    room = DutchRoom(args[0], rawip)
+
     if args[1] == "dump" :
         room.dodump()
     else :
