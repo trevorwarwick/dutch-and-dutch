@@ -4,6 +4,9 @@ Python script(s) for very simple control of Dutch &amp; Dutch 8C active loudspea
 The current script supports putting the speakers in and out of Standby mode, and also
 dumping the stored parameters. 
 
+Please use my dutchdutch component for Home Assistant integration in preference
+to this older script (which is still useful standalone)
+
 To integrate it in Home Assistant, copy the script into the config/custom-components
 directory, and add the following to HA's configuration.yaml. You will need to replace
 SPEAKERDNSNAME with the fqdn of one of your speakers, or its IP address if that is fixed.
